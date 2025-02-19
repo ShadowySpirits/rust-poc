@@ -1,3 +1,8 @@
+#[cfg(test)]
+mod arrow_writer;
+#[cfg(test)]
+mod async_arrow_writer;
+
 use arrow_array::record_batch;
 use futures::TryStreamExt;
 use iceberg::io::{S3_ACCESS_KEY_ID, S3_ENDPOINT, S3_REGION, S3_SECRET_ACCESS_KEY};
@@ -11,8 +16,8 @@ use iceberg::writer::file_writer::ParquetWriterBuilder;
 use iceberg::writer::{IcebergWriter, IcebergWriterBuilder};
 use iceberg::{Catalog, NamespaceIdent, Result, TableCreation};
 use iceberg_catalog_rest::{RestCatalog, RestCatalogConfig};
-use parquet::file::properties::WriterProperties;
 use std::collections::HashMap;
+use parquet::file::properties::WriterProperties;
 
 #[tokio::main]
 async fn main() -> Result<()> {
