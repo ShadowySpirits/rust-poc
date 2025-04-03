@@ -6,9 +6,10 @@ edition = "2021"
 [dependencies]
 iceberg = "0.4.0"
 iceberg-catalog-rest = "0.4.0"
-tokio = { version = "1.0.0", features = ["rt", "rt-multi-thread", "macros"] }
+monoio = "0.2.4"
 futures = "0.3.31"
 parquet = "53.4.0"
 arrow-array = "53.4.0"
 arrow-schema = "53.4.0"
 bytes = "1.9.0"
+opendal = { version = "0.52.0", features = ["services-memory"], default-features = false }

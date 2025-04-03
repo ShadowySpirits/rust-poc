@@ -1,14 +1,15 @@
 use arrow_array::{ArrayRef, Int64Array, RecordBatch};
 use bytes::Bytes;
+use futures::future::BoxFuture;
+use futures::FutureExt;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReader;
+use parquet::arrow::async_writer::AsyncFileWriter;
 use parquet::arrow::AsyncArrowWriter;
 use parquet::basic::{Compression, ZstdLevel};
 use parquet::file::properties::WriterProperties;
-use std::pin::Pin;
+use std::io::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::task::{Context, Poll};
-use tokio::io::AsyncWrite;
 
 struct SizeAwareWriter<W> {
     inner: W,
@@ -24,43 +25,25 @@ impl<W> SizeAwareWriter<W> {
     }
 }
 
-impl<W> AsyncWrite for SizeAwareWriter<W>
+impl<W> AsyncFileWriter for SizeAwareWriter<W>
 where
-    W: AsyncWrite + Unpin,
+    W: Write + Send,
 {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<Result<usize, std::io::Error>> {
-        let this = self.as_mut().get_mut();
-
-        match Pin::new(&mut this.inner).poll_write(cx, buf) {
-            Poll::Ready(Ok(bytes_written)) => {
-                this.size.fetch_add(bytes_written, Ordering::Relaxed);
-                Poll::Ready(Ok(bytes_written))
-            }
-            other => other,
+    fn write(&mut self, bs: Bytes) -> BoxFuture<'_, parquet::errors::Result<()>> {
+        async move {
+            self.size.fetch_add(bs.len(), Ordering::Relaxed);
+            self.inner.write_all(&bs)?;
+            Ok(())
         }
+        .boxed()
     }
 
-    fn poll_flush(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), std::io::Error>> {
-        Pin::new(&mut self.inner).poll_flush(cx)
-    }
-
-    fn poll_shutdown(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), std::io::Error>> {
-        Pin::new(&mut self.inner).poll_shutdown(cx)
+    fn complete(&mut self) -> BoxFuture<'_, parquet::errors::Result<()>> {
+        async move { Ok(()) }.boxed()
     }
 }
 
-
-#[tokio::test]
+#[monoio::test]
 async fn main() {
     let col = Arc::new(Int64Array::from_iter_values([1, 2, 3])) as ArrayRef;
     let to_write = RecordBatch::try_from_iter([("col", col)]).unwrap();
@@ -97,7 +80,7 @@ async fn main() {
     println!("Closing parquet file");
     let meta_data = writer.close().await.unwrap();
     println!("Written bytes: {}", written_bytes.load(Ordering::Relaxed));
-    
+
     assert_eq!(meta_data.row_groups.len(), 3);
 
     let mut reader = ParquetRecordBatchReader::try_new(Bytes::from(buffer), 1024).unwrap();

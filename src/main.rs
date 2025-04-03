@@ -2,6 +2,8 @@
 mod arrow_writer;
 #[cfg(test)]
 mod async_arrow_writer;
+#[cfg(test)]
+mod opendal;
 
 use arrow_array::record_batch;
 use futures::TryStreamExt;
@@ -19,7 +21,7 @@ use iceberg_catalog_rest::{RestCatalog, RestCatalogConfig};
 use std::collections::HashMap;
 use parquet::file::properties::WriterProperties;
 
-#[tokio::main]
+#[monoio::main]
 async fn main() -> Result<()> {
     // Connect to a catalog.
     let config = RestCatalogConfig::builder()
