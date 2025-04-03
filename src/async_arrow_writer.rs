@@ -43,7 +43,7 @@ where
     }
 }
 
-#[monoio::test]
+#[monoio::main]
 async fn main() {
     let col = Arc::new(Int64Array::from_iter_values([1, 2, 3])) as ArrayRef;
     let to_write = RecordBatch::try_from_iter([("col", col)]).unwrap();

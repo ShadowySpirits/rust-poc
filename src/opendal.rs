@@ -3,7 +3,7 @@ use opendal::services;
 use opendal::Operator;
 use opendal::Result;
 
-#[monoio::test]
+#[monoio::main]
 async fn main() -> Result<()> {
     // Pick a builder and configure it.
     let builder = services::Memory::default();
