@@ -4,10 +4,12 @@ use crate::dispatcher::{connect_v3, connect_v5, control_factory_v3, control_fact
 mod dispatcher;
 mod session;
 mod error;
+mod upstream;
+mod handler;
 
 async fn serve() -> std::io::Result<()> {
     ntex::server::Server::build()
-        .bind("mqtt-server", "0.0.0.0:1883", |_config| {
+        .bind("mqtt-gateway", "0.0.0.0:1884", |_config| {
             let mqtt_v3_server = v3::MqttServer::new(connect_v3)
                 .control(control_factory_v3())
                 .publish(publish_factory_v3())

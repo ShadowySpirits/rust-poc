@@ -17,6 +17,9 @@ opendal = { version = "0.52.0", features = ["services-memory"], default-features
 ntex = { version = "2.0", features = ["tokio"] }
 ntex-mqtt = { version = "4.6" }
 
+sfv = "^0.10"
+pingora-load-balancing = "0.4.0"
+
 [[bin]]
 name = "iceberg"
 path = "src/iceberg.rs"
@@ -34,5 +37,5 @@ name = "opendal"
 path = "src/opendal.rs"
 
 [[bin]]
-name = "mqtt_server"
-path = "src/mqtt_server/mod.rs"
+name = "mqtt_gateway"
+path = "src/mqtt_gateway/mod.rs"
