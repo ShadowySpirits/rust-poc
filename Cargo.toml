@@ -15,6 +15,7 @@ bytes = "1.9.0"
 opendal = { version = "0.52.0", features = ["services-memory"], default-features = false }
 
 ntex = { version = "2.0", features = ["tokio"] }
+ntex-io = { version = "2.0" }
 ntex-mqtt = { version = "4.6" }
 
 sfv = "^0.10"

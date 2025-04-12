@@ -3304,6 +3304,7 @@ dependencies = [
  "iceberg-catalog-rest",
  "monoio",
  "ntex",
+ "ntex-io",
  "ntex-mqtt",
  "opendal 0.52.0",
  "parquet",
