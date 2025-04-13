@@ -2157,11 +2157,13 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "regex",
+ "rustls",
  "serde",
  "serde_json",
  "serde_urlencoded",
  "sha-1",
  "thiserror 1.0.69",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -2358,6 +2360,7 @@ dependencies = [
  "ntex-net",
  "ntex-service",
  "ntex-util",
+ "rustls",
 ]
 
 [[package]]

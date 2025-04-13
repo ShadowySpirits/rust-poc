@@ -8,35 +8,42 @@ use std::rc::Rc;
 // (MQTT packet, Remaining length)
 type DecodeResult = (v3::codec::Packet, u32);
 
-pub struct SayHi;
+pub struct RequestLogger;
 
-impl<S> Middleware<S> for SayHi {
-    type Service = SayHiMiddleware<S>;
+impl<S> Middleware<S> for RequestLogger {
+    type Service = RequestLoggerImpl<S>;
 
     fn create(&self, service: S) -> Self::Service {
-        SayHiMiddleware { service }
+        RequestLoggerImpl { service }
     }
 }
 
-pub struct SayHiMiddleware<S> {
+pub struct RequestLoggerImpl<S> {
     service: S,
 }
 
-impl<S, I> Service<DispatchItem<Rc<I>>> for SayHiMiddleware<S>
+impl<S, I> Service<DispatchItem<Rc<I>>> for RequestLoggerImpl<S>
 where
-    S: Service<DispatchItem<Rc<I>>>,
-    I: Decoder<Item=DecodeResult, Error=DecodeError> + Encoder<Item=v3::codec::Packet, Error=EncodeError>
+    S: Service<DispatchItem<Rc<I>>, Response = Option<v3::codec::Packet>>,
+    I: Decoder<Item = DecodeResult, Error = DecodeError>
+        + Encoder<Item = v3::codec::Packet, Error = EncodeError>,
 {
-    type Response = S::Response;
+    type Response = Option<v3::codec::Packet>;
     type Error = S::Error;
 
+    ntex::forward_poll!(service);
     ntex::forward_ready!(service);
+    ntex::forward_shutdown!(service);
 
-    async fn call(&self, req: DispatchItem<Rc<I>>, ctx: ServiceCtx<'_, Self>) -> Result<Self::Response, Self::Error> {
-        println!("Hi from start. You requested: {:?}", req);
+    async fn call(
+        &self,
+        req: DispatchItem<Rc<I>>,
+        ctx: ServiceCtx<'_, Self>,
+    ) -> Result<Self::Response, Self::Error> {
+        // TODO: get session state.
+        println!("Receive MQTT packet: {:?}", req);
         let res = ctx.call(&self.service, req).await?;
-        println!("Hi from response");
+        println!("Send MQTT packet: {:?}", res);
         Ok(res)
     }
 }
-
