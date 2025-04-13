@@ -4,8 +4,8 @@ use crate::upstream::create_lb;
 use ntex::fn_service;
 use ntex::time::Seconds;
 use ntex_mqtt::v3;
-use ntex_mqtt::v3::ControlAck;
 use ntex_mqtt::v3::client::Control;
+use ntex_mqtt::v3::ControlAck;
 use std::cell::RefCell;
 
 pub(crate) async fn handle_connect(
@@ -44,7 +44,13 @@ pub(crate) async fn handle_connect(
         client.start(fn_service(
             move |packet: Control<ServerError>| match packet {
                 Control::Publish(publish) => handle_upstream_pub(publish, session_clone.clone()),
-                _ => unimplemented!(),
+                _ => {
+                    println!(
+                        "Receive packet from upstream but not implement: {:?}",
+                        packet
+                    );
+                    unimplemented!()
+                }
             },
         ))
     });
