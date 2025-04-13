@@ -3,9 +3,9 @@ use crate::session::SessionState;
 use crate::upstream::create_lb;
 use ntex::fn_service;
 use ntex::time::Seconds;
-use ntex_mqtt::v3;
-use ntex_mqtt::v3::client::Control;
 use ntex_mqtt::v3::ControlAck;
+use ntex_mqtt::v3::client::Control;
+use ntex_mqtt::{QoS, v3};
 use std::cell::RefCell;
 
 pub(crate) async fn handle_connect(
@@ -60,7 +60,7 @@ pub(crate) async fn handle_connect(
 }
 
 pub(crate) async fn handle_downstream_pub(
-    publish: v3::Publish,
+    mut publish: v3::Publish,
     session: SessionState<v3::MqttSink>,
 ) -> Result<(), ServerError> {
     println!(
@@ -69,12 +69,24 @@ pub(crate) async fn handle_downstream_pub(
         publish.id(),
         publish.topic()
     );
-    session
+
+    // Forward duplicate downstream packets to the backend.
+    let new_packet_builder = session
         .sink
-        .publish_pkt(publish.packet().clone())
-        .send_at_least_once()
-        .await
-        .map_err(|_| ServerError)
+        .publish(publish.topic().get_ref().clone(), publish.take_payload());
+
+    if let QoS::AtMostOnce = publish.packet().qos {
+        new_packet_builder
+            .send_at_most_once()
+            .map_err(|_| ServerError)
+    } else {
+        // TODO: spawn a task to schedule retry.
+        // Wait for PUBACK
+        new_packet_builder
+            .send_at_least_once()
+            .await
+            .map_err(|_| ServerError)
+    }
 }
 
 async fn handle_upstream_pub(
@@ -86,11 +98,29 @@ async fn handle_upstream_pub(
         publish.packet().packet_id,
         publish.packet().topic
     );
-    session
-        .source
-        .publish_pkt(publish.packet().clone())
-        .send_at_least_once()
-        .await
-        .map(|_| publish.ack())
-        .map_err(|_| ServerError)
+
+    // TODO: Return a specific error for duplicate publish attempts, preventing the release of inflight counter. 
+    if publish.packet().dup {
+        return Err(ServerError);
+    }
+
+    let new_packet_builder = session.source.publish(
+        publish.packet().topic.clone(),
+        publish.packet().payload.clone(),
+    );
+
+    if let QoS::AtMostOnce = publish.packet().qos {
+        new_packet_builder
+            .send_at_most_once()
+            .map(|_| publish.ack())
+            .map_err(|_| ServerError)
+    } else {
+        // TODO: spawn a task to schedule retry.
+        // Wait for PUBACK
+        new_packet_builder
+            .send_at_least_once()
+            .await
+            .map(|_| publish.ack())
+            .map_err(|_| ServerError)
+    }
 }

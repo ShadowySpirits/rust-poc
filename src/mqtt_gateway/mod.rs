@@ -77,6 +77,8 @@ async fn serve() -> std::io::Result<()> {
 
                     MqttServer::new().v3(mqtt_v3_server).v5(mqtt_v5_server)
                 })
+                // TODO: add error handler
+                // .then(service_error_handler)
         })?
         .workers(1)
         .run()
