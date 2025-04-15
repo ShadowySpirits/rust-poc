@@ -1,6 +1,6 @@
 use super::error::ServerError;
 use super::session::SessionState;
-use crate::handler::{handle_connect, handle_downstream_pub};
+use crate::handler::{handle_connect, handle_downstream_control, handle_downstream_pub};
 use ntex::service::fn_factory_with_config;
 use ntex::util::Ready;
 use ntex::{fn_service, ServiceFactory};
@@ -21,26 +21,7 @@ pub(crate) fn control_factory_v3() -> impl ServiceFactory<
     InitError = ServerError,
 > {
     fn_factory_with_config(|session: v3::Session<SessionState<v3::MqttSink>>| {
-        Ready::Ok(fn_service(move |control| match control {
-            v3::Control::Error(e) => Ready::Ok(e.ack()),
-            v3::Control::ProtocolError(e) => Ready::Ok(e.ack()),
-            v3::Control::Ping(p) => Ready::Ok(p.ack()),
-            v3::Control::Disconnect(d) => Ready::Ok(d.ack()),
-            v3::Control::Subscribe(mut s) => {
-                // store subscribed topics in session, publish service uses this list for echos
-                s.iter_mut().for_each(|mut s| {
-                    session.subscriptions.borrow_mut().push(s.topic().clone());
-                    s.confirm(s.qos());
-                });
-
-                Ready::Ok(s.ack())
-            }
-            v3::Control::Unsubscribe(s) => Ready::Ok(s.ack()),
-            v3::Control::Closed(c) => Ready::Ok(c.ack()),
-            v3::Control::PeerGone(c) => Ready::Ok(c.ack()),
-            // TODO: Back pressure
-            v3::Control::WrBackpressure(w) => Ready::Ok(w.ack())
-        }))
+        Ready::Ok(fn_service(move |control: v3::Control<ServerError>| handle_downstream_control(control, session.state().clone())))
     })
 }
 

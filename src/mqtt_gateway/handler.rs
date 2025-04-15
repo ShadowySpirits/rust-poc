@@ -3,8 +3,7 @@ use crate::session::SessionState;
 use crate::upstream::create_lb;
 use ntex::fn_service;
 use ntex::time::Seconds;
-use ntex_mqtt::v3::ControlAck;
-use ntex_mqtt::v3::client::Control;
+use ntex_mqtt::v3::codec::SubscribeReturnCode;
 use ntex_mqtt::{QoS, v3};
 use std::cell::RefCell;
 
@@ -13,6 +12,9 @@ pub(crate) async fn handle_connect(
 ) -> Result<v3::HandshakeAck<SessionState<v3::MqttSink>>, ServerError> {
     // TODO: verify the connect packet.
     let packet = handshake.packet_mut();
+
+    // TODO: get client certificate
+    // handshake.io().query::<PeerCert>().as_ref();
 
     let backend = create_lb()
         .await
@@ -39,18 +41,19 @@ pub(crate) async fn handle_connect(
         sink: upstream_sink,
     };
 
+    let handle_upstream = |packet: v3::client::Control<ServerError>,
+                           session: SessionState<v3::MqttSink>| async {
+        match packet {
+            v3::client::Control::Publish(publish) => handle_upstream_pub(publish, session).await,
+            _ => handle_upstream_control(packet, session).await,
+        }
+    };
+
     let session_clone = session_state.clone();
     ntex::rt::spawn_fn(move || {
         client.start(fn_service(
-            move |packet: Control<ServerError>| match packet {
-                Control::Publish(publish) => handle_upstream_pub(publish, session_clone.clone()),
-                _ => {
-                    println!(
-                        "Receive packet from upstream but not implement: {:?}",
-                        packet
-                    );
-                    unimplemented!()
-                }
+            move |packet: v3::client::Control<ServerError>| {
+                handle_upstream(packet, session_clone.clone())
             },
         ))
     });
@@ -92,14 +95,14 @@ pub(crate) async fn handle_downstream_pub(
 async fn handle_upstream_pub(
     publish: v3::client::control::Publish,
     session: SessionState<v3::MqttSink>,
-) -> Result<ControlAck, ServerError> {
+) -> Result<v3::ControlAck, ServerError> {
     println!(
         "incoming v3 publish from backend: {:?} -> {:?}",
         publish.packet().packet_id,
         publish.packet().topic
     );
 
-    // TODO: Return a specific error for duplicate publish attempts, preventing the release of inflight counter. 
+    // TODO: Return a specific error for duplicate publish attempts, preventing the release of inflight counter.
     if publish.packet().dup {
         return Err(ServerError);
     }
@@ -122,5 +125,92 @@ async fn handle_upstream_pub(
             .await
             .map(|_| publish.ack())
             .map_err(|_| ServerError)
+    }
+}
+
+pub(crate) async fn handle_downstream_control(
+    control: v3::Control<ServerError>,
+    session: SessionState<v3::MqttSink>,
+) -> Result<v3::ControlAck, ServerError> {
+    match control {
+        v3::Control::Subscribe(mut s) => {
+            let subscribe_builder =
+                s.iter_mut()
+                    .fold(session.sink.subscribe(), |builder, s| {
+                        session.subscriptions.borrow_mut().push(s.topic().clone());
+                        builder.topic_filter(s.topic().clone(), s.qos())
+                    });
+
+            subscribe_builder
+                .send()
+                .await
+                .map_err(|_| ServerError)
+                .map(|result| {
+                    assert_eq!(result.len(), s.iter_mut().count());
+
+                    s.iter_mut()
+                        .zip(result.into_iter())
+                        .for_each(|(mut sub, upstream_code)| match upstream_code {
+                            SubscribeReturnCode::Success(qos) => sub.confirm(qos),
+                            SubscribeReturnCode::Failure => sub.fail(),
+                        });
+
+                    s.ack()
+                })
+        }
+        v3::Control::Unsubscribe(s) => {
+            let unsubscribe_builder =
+                s.iter()
+                    .fold(session.sink.unsubscribe(), |builder, topic| {
+                        session.subscriptions.borrow_mut().push(topic.clone());
+                        builder.topic_filter(topic.clone())
+                    });
+
+            unsubscribe_builder
+                .send()
+                .await
+                .map_err(|_| ServerError)
+                .map(|_| s.ack())
+        },
+        v3::Control::Error(e) => Ok(e.ack()),
+        v3::Control::ProtocolError(e) => Ok(e.ack()),
+        v3::Control::Ping(p) => Ok(p.ack()),
+        v3::Control::Disconnect(d) => {
+            println!("Receive downstream disconnect packet: {:?}", d);
+            session.sink.close();
+            Ok(d.ack())
+        },
+        v3::Control::Closed(c) => Ok(c.ack()),
+        v3::Control::PeerGone(c) => Ok(c.ack()),
+        // TODO: Back pressure
+        v3::Control::WrBackpressure(w) => Ok(w.ack()),
+    }
+}
+
+pub(crate) async fn handle_upstream_control(
+    control: v3::client::Control<ServerError>,
+    session: SessionState<v3::MqttSink>,
+) -> Result<v3::ControlAck, ServerError> {
+    match control {
+        v3::client::Control::Closed(c) => {
+            session.source.close();
+            Ok(c.ack())
+        }
+        v3::client::Control::Error(error) => {
+            session.source.close();
+            println!("Error: {:?}", error.get_ref());
+            Ok(error.ack())
+        }
+        v3::client::Control::ProtocolError(error) => {
+            session.source.close();
+            println!("Error: {}", error.get_ref());
+            Ok(error.ack())
+        }
+        v3::client::Control::PeerGone(p) => {
+            session.source.close();
+            println!("Error: {:?}", p.err());
+            Ok(p.ack())
+        }
+        _ => unimplemented!(),
     }
 }
