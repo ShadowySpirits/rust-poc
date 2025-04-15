@@ -67,10 +67,10 @@ pub(crate) async fn handle_downstream_pub(
     session: SessionState<v3::MqttSink>,
 ) -> Result<(), ServerError> {
     println!(
-        "incoming v3 publish from client: {:?}: {:?} -> {:?}",
+        "incoming v3 publish from client: {}: ({:?}, {:?})",
         session.client_id,
         publish.id(),
-        publish.topic()
+        publish.topic(),
     );
 
     // Forward duplicate downstream packets to the backend.
@@ -97,9 +97,10 @@ async fn handle_upstream_pub(
     session: SessionState<v3::MqttSink>,
 ) -> Result<v3::ControlAck, ServerError> {
     println!(
-        "incoming v3 publish from backend: {:?} -> {:?}",
+        "incoming v3 publish from backend: ({:?}, {}) -> {}",
         publish.packet().packet_id,
-        publish.packet().topic
+        publish.packet().topic,
+        session.client_id
     );
 
     // TODO: Return a specific error for duplicate publish attempts, preventing the release of inflight counter.
@@ -176,7 +177,7 @@ pub(crate) async fn handle_downstream_control(
         v3::Control::ProtocolError(e) => Ok(e.ack()),
         v3::Control::Ping(p) => Ok(p.ack()),
         v3::Control::Disconnect(d) => {
-            println!("Receive downstream disconnect packet: {:?}", d);
+            println!("Receive downstream disconnect packet: clientId: {}, {:?}", session.client_id, d);
             session.sink.close();
             Ok(d.ack())
         },
@@ -198,17 +199,17 @@ pub(crate) async fn handle_upstream_control(
         }
         v3::client::Control::Error(error) => {
             session.source.close();
-            println!("Error: {:?}", error.get_ref());
+            println!("Server error: clientId: {}, {:?}", session.client_id, error.get_ref());
             Ok(error.ack())
         }
         v3::client::Control::ProtocolError(error) => {
             session.source.close();
-            println!("Error: {}", error.get_ref());
+            println!("Protocol error: clientId: {}, {}", session.client_id, error.get_ref());
             Ok(error.ack())
         }
         v3::client::Control::PeerGone(p) => {
             session.source.close();
-            println!("Error: {:?}", p.err());
+            println!("Peer gone error: clientId: {}, {:?}", session.client_id, p.err());
             Ok(p.ack())
         }
         _ => unimplemented!(),
