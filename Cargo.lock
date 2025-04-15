@@ -3399,6 +3399,7 @@ dependencies = [
  "rustls",
  "rustls-pemfile",
  "sfv",
+ "tokio",
  "x509-parser",
 ]
 
