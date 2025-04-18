@@ -9,13 +9,16 @@ use ntex::util::Ready;
 use ntex::{chain_factory, fn_service};
 use ntex_io::{Io, Layer};
 use ntex_mqtt::{v3, v5, MqttError, MqttServer};
+use pingora_load_balancing::selection::Consistent;
+use pingora_load_balancing::LoadBalancer;
 use rustls::server::WebPkiClientVerifier;
 use rustls::{RootCertStore, ServerConfig};
 use std::fs::File;
 use std::io::BufReader;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use x509_parser::certificate::X509Certificate;
 use x509_parser::prelude::FromDer;
+use crate::upstream::create_lb;
 
 mod dispatcher;
 mod error;
@@ -23,6 +26,8 @@ mod handler;
 mod middleware;
 mod session;
 mod upstream;
+
+static UPSTREAM: LazyLock<Arc<LoadBalancer<Consistent>>> = LazyLock::new(create_lb);
 
 async fn listen_tcp() -> std::io::Result<()> {
     ntex::server::Server::build()
@@ -115,6 +120,8 @@ async fn listen_tls() -> std::io::Result<()> {
 
 #[ntex::main]
 async fn main() {
+    let _ = UPSTREAM.clone();
+    
     let tcp_handle = ntex::rt::spawn(listen_tcp());
     let tls_handle = ntex::rt::spawn(listen_tls());
     let _ = tokio::join!(tcp_handle, tls_handle);

@@ -1,10 +1,10 @@
 use crate::error::ServerError;
 use crate::session::SessionState;
-use crate::upstream::create_lb;
+use crate::UPSTREAM;
 use ntex::fn_service;
 use ntex::time::Seconds;
 use ntex_mqtt::v3::codec::SubscribeReturnCode;
-use ntex_mqtt::{QoS, v3};
+use ntex_mqtt::{v3, QoS};
 use std::cell::RefCell;
 
 pub(crate) async fn handle_connect(
@@ -16,10 +16,12 @@ pub(crate) async fn handle_connect(
     // TODO: get client certificate
     // handshake.io().query::<PeerCert>().as_ref();
 
-    let backend = create_lb()
-        .await
+    let backend = UPSTREAM
         .select(packet.client_id.as_slice(), 1)
-        .unwrap();
+        .ok_or_else(|| {
+            println!("no backend found");
+            ServerError
+        })?;
 
     // TODO: clone the received connect packet.
     let client = v3::client::MqttConnector::new(backend.addr.to_string())
@@ -27,7 +29,10 @@ pub(crate) async fn handle_connect(
         .keep_alive(Seconds::new(60))
         .connect()
         .await
-        .unwrap();
+        .map_err(|e| {
+            println!("Connect to {} failed: {}", backend.addr, e);
+            ServerError
+        })?;
 
     // TODO: close connection when source is disconnected.
     let upstream_sink = client.sink();
