@@ -1,36 +1,37 @@
-use crate::error::ServerError;
-use crate::session::SessionState;
-use crate::UPSTREAM;
+use super::error::ServerError;
+use super::session::SessionState;
+use super::UPSTREAM;
 use ntex::fn_service;
 use ntex::time::Seconds;
 use ntex_mqtt::v3::codec::SubscribeReturnCode;
 use ntex_mqtt::{v3, QoS};
 use std::cell::RefCell;
+use log::{info, error, debug};
 
 pub(crate) async fn handle_connect(
     mut handshake: v3::Handshake,
 ) -> Result<v3::HandshakeAck<SessionState<v3::MqttSink>>, ServerError> {
     // TODO: verify the connect packet.
-    let packet = handshake.packet_mut();
+    let client_id = handshake.packet_mut().client_id.to_string();
 
     // TODO: get client certificate
     // handshake.io().query::<PeerCert>().as_ref();
 
     let backend = UPSTREAM
-        .select(packet.client_id.as_slice(), 1)
+        .select(client_id.as_bytes(), 1)
         .ok_or_else(|| {
-            println!("no backend found");
+            error!("No backend found for client ID: {}", client_id);
             ServerError
         })?;
 
     // TODO: clone the received connect packet.
     let client = v3::client::MqttConnector::new(backend.addr.to_string())
-        .client_id(packet.client_id.to_string())
+        .client_id(client_id.clone())
         .keep_alive(Seconds::new(60))
         .connect()
         .await
         .map_err(|e| {
-            println!("Connect to {} failed: {}", backend.addr, e);
+            error!("TCP connection to backend {} failed: {}", backend.addr, e);
             ServerError
         })?;
 
@@ -38,10 +39,11 @@ pub(crate) async fn handle_connect(
     let upstream_sink = client.sink();
 
     // TODO: load session from database.
+    let sink = handshake.sink();
     let session_state = SessionState {
-        client_id: packet.client_id.to_string(),
+        client_id: client_id.clone(),
         subscriptions: RefCell::new(Vec::new()),
-        source: handshake.sink(),
+        source: sink,
         // TODO: create multiple sinks if they need to connect to multiple upstream.
         sink: upstream_sink,
     };
@@ -63,7 +65,8 @@ pub(crate) async fn handle_connect(
         ))
     });
 
-    println!("new v3 connection: {:?}", handshake);
+    info!("New MQTT v3 TCP connection established: client_id={}", client_id);
+    debug!("Connection details: handshake received");
     Ok(handshake.ack(session_state, false))
 }
 
@@ -71,8 +74,8 @@ pub(crate) async fn handle_downstream_pub(
     mut publish: v3::Publish,
     session: SessionState<v3::MqttSink>,
 ) -> Result<(), ServerError> {
-    println!(
-        "incoming v3 publish from client: {}: ({:?}, {:?})",
+    debug!(
+        "Incoming MQTT v3 publish over TCP from client {}: packet_id={:?}, topic={:?}",
         session.client_id,
         publish.id(),
         publish.topic(),
@@ -101,8 +104,8 @@ async fn handle_upstream_pub(
     publish: v3::client::control::Publish,
     session: SessionState<v3::MqttSink>,
 ) -> Result<v3::ControlAck, ServerError> {
-    println!(
-        "incoming v3 publish from backend: ({:?}, {}) -> {}",
+    debug!(
+        "Incoming MQTT v3 publish over TCP from backend: packet_id={:?}, topic={} -> client_id={}",
         publish.packet().packet_id,
         publish.packet().topic,
         session.client_id
@@ -182,7 +185,8 @@ pub(crate) async fn handle_downstream_control(
         v3::Control::ProtocolError(e) => Ok(e.ack()),
         v3::Control::Ping(p) => Ok(p.ack()),
         v3::Control::Disconnect(d) => {
-            println!("Receive downstream disconnect packet: clientId: {}, {:?}", session.client_id, d);
+            info!("Received TCP disconnect from client: client_id={}", session.client_id);
+            debug!("Disconnect details: {:?}", d);
             session.sink.close();
             Ok(d.ack())
         },

@@ -26,6 +26,10 @@ ntex-mqtt = { version = "4.6" }
 sfv = "^0.10"
 pingora-load-balancing = "0.4.0"
 
+# Logging dependencies
+log = "0.4"
+env_logger = "0.10"
+
 [[bin]]
 name = "iceberg"
 path = "src/iceberg.rs"
