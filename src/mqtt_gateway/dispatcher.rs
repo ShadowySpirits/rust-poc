@@ -1,3 +1,5 @@
+use super::session::AnySink;
+
 use super::error::ServerError;
 use super::session::SessionState;
 use super::handler::{handle_connect, handle_downstream_control, handle_downstream_pub};
@@ -47,7 +49,7 @@ pub(crate) async fn connect_v5(
         client_id: handshake.packet().client_id.to_string(),
         subscriptions: RefCell::new(vec![]),
         source: handshake.sink(),
-        sink: handshake.sink(),
+        sink: AnySink::MqttSink(handshake.sink()),
     };
     Ok(handshake.ack(session))
 }

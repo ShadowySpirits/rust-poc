@@ -28,6 +28,7 @@ mod handler;
 mod middleware;
 mod session;
 mod upstream;
+mod dual;
 
 static UPSTREAM: LazyLock<Arc<LoadBalancer<Consistent>>> = LazyLock::new(create_lb);
 
