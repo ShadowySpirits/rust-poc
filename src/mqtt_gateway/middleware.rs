@@ -4,6 +4,7 @@ use ntex_io::DispatchItem;
 use ntex_mqtt::error::{DecodeError, EncodeError};
 use ntex_mqtt::v3;
 use std::rc::Rc;
+use log::{debug};
 
 // (MQTT packet, Remaining length)
 type DecodeResult = (v3::codec::Packet, u32);
@@ -41,9 +42,9 @@ where
         ctx: ServiceCtx<'_, Self>,
     ) -> Result<Self::Response, Self::Error> {
         // TODO: get session state.
-        println!("Receive MQTT packet: {:?}", req);
+        debug!("TCP: Received MQTT packet: {:?}", req);
         let res = ctx.call(&self.service, req).await?;
-        println!("Send MQTT packet: {:?}", res);
+        debug!("TCP: Sending MQTT packet: {:?}", res);
         Ok(res)
     }
 }

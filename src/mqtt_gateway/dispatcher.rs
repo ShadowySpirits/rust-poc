@@ -1,11 +1,14 @@
+use super::session::AnySink;
+
 use super::error::ServerError;
 use super::session::SessionState;
-use crate::handler::{handle_connect, handle_downstream_control, handle_downstream_pub};
+use super::handler::{handle_connect, handle_downstream_control, handle_downstream_pub};
 use ntex::service::fn_factory_with_config;
 use ntex::util::Ready;
 use ntex::{fn_service, ServiceFactory};
 use ntex_mqtt::{v3, v5};
 use std::cell::RefCell;
+use log::{info, debug};
 
 pub(crate) async fn connect_v3(
     handshake: v3::Handshake,
@@ -40,12 +43,13 @@ pub fn publish_factory_v3() -> impl ServiceFactory<
 pub(crate) async fn connect_v5(
     handshake: v5::Handshake,
 ) -> Result<v5::HandshakeAck<SessionState<v5::MqttSink>>, ServerError> {
-    println!("new v5 connection: {:?}", handshake);
+    info!("New MQTT v5 TCP connection established: client_id={}", handshake.packet().client_id);
+    debug!("Connection details: {:?}", handshake);
     let session = SessionState {
         client_id: handshake.packet().client_id.to_string(),
         subscriptions: RefCell::new(vec![]),
         source: handshake.sink(),
-        sink: handshake.sink(),
+        sink: AnySink::MqttSink(handshake.sink()),
     };
     Ok(handshake.ack(session))
 }
@@ -93,8 +97,8 @@ pub(crate) fn publish_factory_v5() -> impl ServiceFactory<
 > {
     fn_factory_with_config(|session: v5::Session<SessionState<v5::MqttSink>>| {
         Ready::Ok(fn_service(move |publish: v5::Publish| {
-            println!(
-                "incoming v5 publish from client: {:?}: {:?} -> {:?}",
+            debug!(
+                "Incoming MQTT v5 publish over TCP from client {}: packet_id={:?}, topic={:?}",
                 session.client_id,
                 publish.id(),
                 publish.topic()
