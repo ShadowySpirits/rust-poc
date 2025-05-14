@@ -1,6 +1,6 @@
 use clap::Parser;
 use hdrhistogram::Histogram;
-use mmap_rs::{MmapFlags, MmapOptions};
+use memmap2::MmapOptions;
 use parquet::file::reader::Length;
 use rand::{RngCore, thread_rng};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -33,8 +33,8 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    println!("page size: {}", MmapOptions::page_size());
-    if args.bs * 1024 % MmapOptions::page_size() != 0 {
+    println!("page size: {}", page_size::get());
+    if args.bs * 1024 % page_size::get() != 0 {
         eprintln!("Argument 'bs' must be a multiple of the page size.");
         exit(1);
     }
@@ -48,14 +48,7 @@ fn main() {
         .unwrap();
     file.set_len((args.file_size * 1024 * 1024) as u64).unwrap();
 
-    let mut mapping = unsafe {
-        MmapOptions::new(args.file_size * 1024 * 1024)
-            .unwrap()
-            .with_flags(MmapFlags::SHARED)
-            .with_file(&file, 0)
-            .map_mut()
-            .unwrap()
-    };
+    let mapping = MmapOptions::new().map_raw(&file).unwrap();
     let mapping_ptr = mapping.as_mut_ptr();
 
     assert_ne!(mapping.as_ptr(), std::ptr::null());
@@ -71,7 +64,7 @@ fn main() {
 
     let size = args.bs * 1024 * args.io_depth;
     let mut data = vec![0; size];
-    let mut rng = thread_rng();
+    thread_rng().fill_bytes(data.as_mut_slice());
 
     let start = SystemTime::now();
     let mut offset: usize = 0;
@@ -85,7 +78,6 @@ fn main() {
         }
 
         // Write data to mmap buffer.
-        rng.fill_bytes(data.as_mut_slice());
         unsafe {
             mapping_ptr
                 .add(offset)
@@ -95,16 +87,18 @@ fn main() {
         let mut flush_request_vec = Vec::with_capacity(args.io_depth);
 
         for _ in 0..args.io_depth {
-            flush_request_vec.push(offset..offset + args.bs * 1024);
+            flush_request_vec.push((offset, args.bs * 1024));
             offset += args.bs * 1024;
         }
 
         // Flush dirty pages to disk.
         flush_request_vec.into_par_iter().for_each_init(
             || hist.recorder(),
-            |hist, range| {
+            |hist, offset_len_pair| {
                 let now = SystemTime::now();
-                mapping.flush(range.clone()).unwrap();
+                mapping
+                    .flush_range(offset_len_pair.0, offset_len_pair.1)
+                    .unwrap();
                 hist.record(now.elapsed().unwrap().as_nanos() as u64)
                     .unwrap();
             },

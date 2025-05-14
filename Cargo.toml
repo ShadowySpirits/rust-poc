@@ -27,7 +27,8 @@ sfv = "^0.10"
 pingora-load-balancing = "0.4.0"
 
 clap = { version = "4.5", features = ["derive"] }
-mmap-rs = "0.6"
+page_size = "0.6"
+memmap2 = "0.9"
 rayon = "1.10"
 
 # Logging dependencies
