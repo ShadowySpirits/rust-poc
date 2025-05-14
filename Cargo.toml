@@ -26,9 +26,15 @@ ntex-mqtt = { version = "4.6" }
 sfv = "^0.10"
 pingora-load-balancing = "0.4.0"
 
+clap = { version = "4.5", features = ["derive"] }
+mmap-rs = "0.6"
+rayon = "1.10"
+
 # Logging dependencies
 log = "0.4"
 env_logger = "0.10"
+rand = "0.8.5"
+hdrhistogram = "7.5"
 
 [[bin]]
 name = "iceberg"
@@ -49,3 +55,7 @@ path = "src/opendal.rs"
 [[bin]]
 name = "mqtt_gateway"
 path = "src/mqtt_gateway/mod.rs"
+
+[[bin]]
+name = "mmap"
+path = "src/mmap.rs"
