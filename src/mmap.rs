@@ -2,7 +2,7 @@ use clap::Parser;
 use hdrhistogram::Histogram;
 use mmap_rs::{MmapFlags, MmapOptions};
 use parquet::file::reader::Length;
-use rand::random;
+use rand::{RngCore, thread_rng};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::fs::OpenOptions;
 use std::process::exit;
@@ -56,6 +56,7 @@ fn main() {
             .map_mut()
             .unwrap()
     };
+    let mapping_ptr = mapping.as_mut_ptr();
 
     assert_ne!(mapping.as_ptr(), std::ptr::null());
 
@@ -66,12 +67,13 @@ fn main() {
 
     let mut bytes = 0u64;
     let mut io = 0u64;
-    let mut hist = Histogram::<u64>::new(2)
-        .unwrap()
-        .into_sync();
+    let mut hist = Histogram::<u64>::new(2).unwrap().into_sync();
+
+    let size = args.bs * 1024 * args.io_depth;
+    let mut data = vec![0; size];
+    let mut rng = thread_rng();
 
     let start = SystemTime::now();
-    let size: usize = args.bs * 1024 * args.io_depth;
     let mut offset: usize = 0;
     loop {
         if start.elapsed().unwrap().as_secs() > args.duration {
@@ -83,9 +85,11 @@ fn main() {
         }
 
         // Write data to mmap buffer.
-        let byte = random::<u8>();
-        for i in offset..offset + size {
-            mapping[i] = byte;
+        rng.fill_bytes(data.as_mut_slice());
+        unsafe {
+            mapping_ptr
+                .add(offset)
+                .copy_from_nonoverlapping(data.as_ptr(), size);
         }
 
         let mut flush_request_vec = Vec::with_capacity(args.io_depth);
