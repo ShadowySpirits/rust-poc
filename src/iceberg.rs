@@ -2,7 +2,7 @@ use arrow_array::record_batch;
 use futures::TryStreamExt;
 use iceberg::io::{S3_ACCESS_KEY_ID, S3_ENDPOINT, S3_REGION, S3_SECRET_ACCESS_KEY};
 use iceberg::spec::{DataFileFormat, NestedField, PrimitiveType, Schema, Type};
-use iceberg::transaction::Transaction;
+use iceberg::transaction::{ApplyTransactionAction, Transaction};
 use iceberg::writer::base_writer::data_file_writer::DataFileWriterBuilder;
 use iceberg::writer::file_writer::location_generator::{
     DefaultFileNameGenerator, DefaultLocationGenerator,
@@ -64,7 +64,7 @@ async fn main() -> Result<()> {
         DefaultFileNameGenerator::new("prefix".to_string(), None, DataFileFormat::Parquet),
     );
 
-    let mut writer = DataFileWriterBuilder::new(parquet_writer_builder, None)
+    let mut writer = DataFileWriterBuilder::new(parquet_writer_builder, None, 0)
         .build()
         .await?;
 
@@ -78,9 +78,9 @@ async fn main() -> Result<()> {
     
     // Commit result
     let tx = Transaction::new(&table);
-    let mut append_action = tx.fast_append(None, vec![])?;
-    append_action.add_data_files(data_file.clone())?;
-    let tx = append_action.apply().await?;
+    let mut append_action = tx.fast_append();
+    append_action = append_action.add_data_files(data_file.clone());
+    let tx = append_action.apply(tx)?;
     let table = tx.commit(&catalog).await?;
 
     // Build table scan

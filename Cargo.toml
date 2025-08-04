@@ -4,15 +4,19 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-iceberg = "0.4.0"
-iceberg-catalog-rest = "0.4.0"
+iceberg = "0.6.0"
+iceberg-catalog-rest = "0.6.0"
 monoio = "0.2.4"
 futures = "0.3.31"
-parquet = "53.4.0"
-arrow-array = "53.4.0"
-arrow-schema = "53.4.0"
+parquet = { version = "55", features = ["async"] }
+arrow = "55"
+arrow-array = "55"
+arrow-schema = "55"
 bytes = "1.9.0"
-opendal = { version = "0.52.0", features = ["services-memory"], default-features = false }
+opendal = { version = "0.54.0", features = ["services-memory"], default-features = false }
+
+lance = "0.32"
+aws-smithy-runtime = "1.8.3"
 
 rustls = { version = "0.23", features = ["ring", "std"], default-features = false }
 rustls-pemfile = "2"
@@ -24,7 +28,7 @@ ntex-io = { version = "2.0" }
 ntex-mqtt = { version = "4.6" }
 
 sfv = "^0.10"
-pingora-load-balancing = "0.4.0"
+pingora-load-balancing = "0.5.0"
 
 clap = { version = "4.5", features = ["derive"] }
 page_size = "0.6"
@@ -33,9 +37,9 @@ rayon = "1.10"
 
 crossbeam = "0.8.4"
 
-quiche = "0.17.2"
+quiche = "0.24.4"
 mio = "1.0.4"
-hostname = "0.3"
+hostname = "0.4"
 
 # Logging dependencies
 log = "0.4"
@@ -83,3 +87,7 @@ path = "src/quic_client.rs"
 [[bin]]
 name = "quic_server"
 path = "src/quic_server.rs"
+
+[[bin]]
+name = "lance_table"
+path = "src/lance_table.rs"
