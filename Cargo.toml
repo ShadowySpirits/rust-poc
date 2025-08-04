@@ -33,11 +33,16 @@ rayon = "1.10"
 
 crossbeam = "0.8.4"
 
+quiche = "0.17.2"
+mio = "1.0.4"
+hostname = "0.3"
+
 # Logging dependencies
 log = "0.4"
-env_logger = "0.10"
-rand = "0.8.5"
+env_logger = "0.11.8"
+rand = "0.9.1"
 hdrhistogram = "7.5"
+ring = "0.17.8"
 
 [[bin]]
 name = "iceberg"
@@ -70,3 +75,11 @@ path = "src/lock.rs"
 [[bin]]
 name = "atomic"
 path = "src/atomic.rs"
+
+[[bin]]
+name = "quic_client"
+path = "src/quic_client.rs"
+
+[[bin]]
+name = "quic_server"
+path = "src/quic_server.rs"
